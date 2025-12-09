@@ -138,7 +138,7 @@ impl<'a> BmeSettingsHandle<'a> {
 
     /// Returns the desired gas sensor heating duration in milliseconds.
     pub fn heating_duration(&self) -> u16 {
-        self.bme_settings.heating_duration
+        self.bme_settings.heater_duration
     }
 
     /// Returns whether to run a gas measurement.
