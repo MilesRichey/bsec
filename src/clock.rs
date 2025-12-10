@@ -1,5 +1,6 @@
 //! Interface to measure time.
 
+#[cfg(feature = "std")]
 use std::time::Instant;
 
 /// The BSEC algorithem needs a clock capable of providing timestamps.
@@ -37,10 +38,14 @@ pub trait Clock {
 }
 
 /// Measures time since the creation of an instance.
+///
+/// This clock implementation is only available with the `std` feature enabled.
+#[cfg(feature = "std")]
 pub struct TimePassed {
     start: Instant,
 }
 
+#[cfg(feature = "std")]
 impl TimePassed {
     /// Create a new instance starting time measurement at instant of
     /// instantiation.
@@ -51,6 +56,7 @@ impl TimePassed {
     }
 }
 
+#[cfg(feature = "std")]
 impl Default for TimePassed {
     fn default() -> Self {
         Self {
@@ -59,6 +65,7 @@ impl Default for TimePassed {
     }
 }
 
+#[cfg(feature = "std")]
 impl Clock for TimePassed {
     fn timestamp_ns(&self) -> i64 {
         self.start.elapsed().as_nanos() as i64
@@ -80,10 +87,8 @@ pub mod tests {
 /// This module is only available if the **test-support** feature is enabled.
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support {
-    use std::{
-        sync::atomic::{AtomicI64, Ordering},
-        time::Duration,
-    };
+    use core::sync::atomic::{AtomicI64, Ordering};
+    use core::time::Duration;
 
     use super::*;
 

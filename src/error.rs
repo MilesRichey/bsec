@@ -1,8 +1,8 @@
 //! Error types.
 
+use core::fmt::{self, Debug, Display, Formatter};
 #[cfg(not(feature = "docs-rs"))]
 use libalgobsec_sys::{bsec_library_return_t, bsec_virtual_sensor_t};
-use std::fmt::{self, Debug, Display, Formatter};
 
 #[cfg(feature = "docs-rs")]
 #[allow(non_camel_case_types)]
@@ -52,6 +52,7 @@ impl<E: Debug> Display for Error<E> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<E: Debug> std::error::Error for Error<E> {}
 
 impl<E: Debug> From<BsecError> for Error<E> {
@@ -99,6 +100,7 @@ impl Display for ConversionError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for ConversionError {}
 
 /// Error reported by the Bosch BSEC library.
@@ -123,6 +125,7 @@ pub enum BsecError {
     UpdateSubscriptionUnkownOutputGate,
     UpdateSubscriptionModeInNonUlp,
     UpdateSubscriptionSubscribedOutputGates,
+    UpdateSubscriptionSampleRateMismatch,
     ParseSectionExceedsWorkBuffer,
     ConfigFail,
     ConfigVersionMismatch,
@@ -147,6 +150,7 @@ impl Display for BsecError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for BsecError {}
 
 impl From<bsec_library_return_t> for BsecError {
@@ -185,6 +189,9 @@ impl From<bsec_library_return_t> for BsecError {
             bsec_library_return_t_BSEC_W_SU_MODINNOULP => UpdateSubscriptionModeInNonUlp,
             bsec_library_return_t_BSEC_I_SU_SUBSCRIBEDOUTPUTGATES => {
                 UpdateSubscriptionSubscribedOutputGates
+            }
+            bsec_library_return_t_BSEC_W_SU_SAMPLERATEMISMATCH => {
+                UpdateSubscriptionSampleRateMismatch
             }
             bsec_library_return_t_BSEC_E_PARSE_SECTIONEXCEEDSWORKBUFFER => {
                 ParseSectionExceedsWorkBuffer

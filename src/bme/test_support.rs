@@ -3,15 +3,20 @@
 //! This module is only available if the **test-support** feature is enabled.
 
 use super::*;
+use core::fmt;
+
+#[cfg(feature = "alloc")]
+use alloc::vec;
 
 /// "Unit" error type with only a single variant.
 #[derive(Copy, Clone, Debug)]
 pub struct UnitError;
 
+#[cfg(feature = "std")]
 impl std::error::Error for UnitError {}
 
-impl std::fmt::Display for UnitError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+impl fmt::Display for UnitError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.write_fmt(format_args!("{:?}", self))
     }
 }
@@ -39,11 +44,8 @@ impl Default for FakeBmeSensor {
 impl BmeSensor for FakeBmeSensor {
     type Error = UnitError;
 
-    fn start_measurement(
-        &mut self,
-        _: &BmeSettingsHandle<'_>,
-    ) -> Result<std::time::Duration, UnitError> {
-        Ok(std::time::Duration::new(0, 0))
+    fn start_measurement(&mut self, _: &BmeSettingsHandle<'_>) -> Result<Duration, UnitError> {
+        Ok(Duration::new(0, 0))
     }
 
     fn get_measurement(&mut self) -> nb::Result<Vec<Input>, UnitError> {

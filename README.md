@@ -29,6 +29,7 @@ permissive license.
 ## Features
 
 * Safe Rust API bindings to the *Bosch BSEC* library.
+* `no_std` support with optional `alloc` for embedded environments.
 * Implementation to use it with the
   [BME680](https://www.bosch-sensortec.com/products/environmental-sensors/gas-sensors/bme680/)
   sensor.

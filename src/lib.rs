@@ -161,13 +161,42 @@
 //!
 //! ## Features
 //!
+//! * **std** (enabled by default): Enables standard library support. Provides `std::error::Error`
+//!   trait implementations and the `clock::TimePassed` implementation using `std::time::Instant`.
+//! * **alloc** (enabled by default): Enables allocator support. Required for `Vec` usage in the
+//!   `BmeSensor` trait. For `no_std` environments, this feature is necessary for basic functionality.
 //! * **use-bme680**: Enables the [`bme680`] module providing a [`BmeSensor`]
-//!   implementation for the BME680 sensor to use it with *bsec*.
+//!   implementation for the BME680 sensor to use it with *bsec*. Requires `alloc` feature. Works in `no_std`.
 //! * **test-support**: Provides additional classes for unit testing.
+//!
+//! ### no_std Support
+//!
+//! This crate supports `no_std` environments. To use in a `no_std` environment:
+//!
+//! ```toml
+//! [dependencies]
+//! bsec = { version = "0.6", default-features = false, features = ["alloc"] }
+//! ```
+//!
+//! Note: The `alloc` feature is required for practical use as the `BmeSensor` trait returns `Vec`.
+//! You must also provide your own `Clock` implementation as `clock::TimePassed` requires `std`.
+//! See the [NO_STD.md](https://github.com/jgosmann/bsec/blob/main/NO_STD.md) file for more details.
+
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(feature = "alloc")]
+extern crate alloc;
 
 use crate::bme::{BmeSensor, BmeSettingsHandle};
 use crate::clock::Clock;
 use crate::error::{BsecError, ConversionError, Error};
+use core::borrow::Borrow;
+use core::convert::{From, TryFrom, TryInto};
+use core::fmt::Debug;
+use core::hash::Hash;
+use core::marker::PhantomData;
+use core::sync::atomic::{AtomicBool, Ordering};
+use core::time::Duration;
 #[cfg(not(feature = "docs-rs"))]
 use libalgobsec_sys::{
     bsec_bme_settings_t, bsec_do_steps, bsec_get_configuration, bsec_get_state, bsec_get_version,
@@ -177,13 +206,11 @@ use libalgobsec_sys::{
     BSEC_MAX_PHYSICAL_SENSOR, BSEC_MAX_PROPERTY_BLOB_SIZE, BSEC_MAX_STATE_BLOB_SIZE,
     BSEC_MAX_WORKBUFFER_SIZE,
 };
-use std::borrow::Borrow;
-use std::convert::{From, TryFrom, TryInto};
-use std::fmt::Debug;
-use std::hash::Hash;
-use std::marker::PhantomData;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+
+#[cfg(feature = "alloc")]
+use alloc::vec;
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
 
 #[cfg(feature = "docs-rs")]
 #[allow(non_camel_case_types)]
@@ -798,20 +825,28 @@ trait IntoResult {
 impl IntoResult for bsec_library_return_t {
     fn into_result(self) -> Result<(), BsecError> {
         #![allow(non_upper_case_globals)]
-        match self {
-            libalgobsec_sys::bsec_library_return_t_BSEC_OK => Ok(()),
-            error_code => Err(BsecError::from(error_code)),
+        // BSEC return codes:
+        // - 0: OK/success
+        // - Positive values: warnings (W_) and informational (I_) - not errors
+        // - Negative values: actual errors (E_)
+        if self >= 0 {
+            Ok(())
+        } else {
+            Err(BsecError::from(self))
         }
     }
 }
 
 #[cfg(test)]
 pub mod tests {
+    extern crate std;
+    use std::collections::HashMap;
+    use std::vec;
+
     use super::*;
     use crate::bme::test_support::FakeBmeSensor;
     use crate::clock::test_support::FakeClock;
     use serial_test::serial;
-    use std::collections::HashMap;
 
     #[test]
     #[serial]

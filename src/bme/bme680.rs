@@ -20,13 +20,17 @@
 //!     .build();
 //! ```
 
-use std::fmt::Debug;
-use std::time::{Duration, Instant};
+use core::fmt::Debug;
+use core::time::Duration;
+
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
 
 use crate::bme::{BmeSensor, BmeSettingsHandle};
 use crate::{Input, InputKind};
 use bme680::{Bme680, OversamplingSetting, PowerMode, SettingsBuilder};
 use embedded_hal::{delay::DelayNs, i2c};
+use libm::roundf;
 
 /// Builder for [`Bme680Sensor`] instances.
 pub struct Bme680SensorBuilder<I2C, D>
@@ -106,7 +110,7 @@ where
 {
     bme680: Bme680<I2C, D>,
     delay: D,
-    measurement_available_after: Option<Instant>,
+    measurement_started: bool,
     last_measured_temp_celsius: f32,
     temp_offset_celsius: f32,
     disable_baseline_tracker: Option<f32>,
@@ -139,7 +143,7 @@ where
         Bme680Sensor {
             bme680,
             delay,
-            measurement_available_after: None,
+            measurement_started: false,
             last_measured_temp_celsius: initial_ambient_temp_celsius,
             temp_offset_celsius,
             disable_baseline_tracker,
@@ -170,7 +174,7 @@ where
             .with_gas_measurement(
                 Duration::from_millis(settings.heating_duration().into()),
                 settings.heater_temperature(),
-                self.last_measured_temp_celsius.round() as i8,
+                roundf(self.last_measured_temp_celsius) as i8,
             )
             .build();
 
@@ -178,48 +182,51 @@ where
         let profile_duration = self.bme680.get_profile_dur(&settings.0)?;
         self.bme680
             .set_sensor_mode(&mut self.delay, PowerMode::ForcedMode)?;
-        self.measurement_available_after = Some(Instant::now() + profile_duration);
+        self.measurement_started = true;
         Ok(profile_duration)
     }
 
     fn get_measurement(&mut self) -> nb::Result<Vec<Input>, Self::Error> {
-        match self.measurement_available_after {
-            None => panic!("must call start_measurement before get_measurement"),
-            Some(instant) if instant > Instant::now() => Err(nb::Error::WouldBlock),
-            _ => {
-                let (data, _state) = self.bme680.get_sensor_data(&mut self.delay)?;
-                self.last_measured_temp_celsius = data.temperature_celsius();
-                let mut bsec_inputs = Vec::with_capacity(6);
-                bsec_inputs.extend(&[
-                    Input {
-                        sensor: InputKind::Temperature,
-                        signal: data.temperature_celsius(),
-                    },
-                    Input {
-                        sensor: InputKind::Pressure,
-                        signal: data.pressure_hpa(),
-                    },
-                    Input {
-                        sensor: InputKind::Humidity,
-                        signal: data.humidity_percent(),
-                    },
-                    Input {
-                        sensor: InputKind::GasResistor,
-                        signal: data.gas_resistance_ohm() as f32,
-                    },
-                    Input {
-                        sensor: InputKind::HeatSource,
-                        signal: self.temp_offset_celsius,
-                    },
-                ]);
-                if let Some(status) = self.disable_baseline_tracker {
-                    bsec_inputs.push(Input {
-                        sensor: InputKind::DisableBaselineTracker,
-                        signal: status,
-                    });
-                }
-                Ok(bsec_inputs)
-            }
+        if !self.measurement_started {
+            panic!("must call start_measurement before get_measurement");
         }
+
+        // Get the sensor data. Caller should have waited for the profile_duration
+        // before calling this, so data should be ready.
+        let (data, _state) = self.bme680.get_sensor_data(&mut self.delay)
+            .map_err(nb::Error::Other)?;
+
+        self.measurement_started = false;
+        self.last_measured_temp_celsius = data.temperature_celsius();
+        let mut bsec_inputs = Vec::with_capacity(6);
+        bsec_inputs.extend(&[
+            Input {
+                sensor: InputKind::Temperature,
+                signal: data.temperature_celsius(),
+            },
+            Input {
+                sensor: InputKind::Pressure,
+                signal: data.pressure_hpa(),
+            },
+            Input {
+                sensor: InputKind::Humidity,
+                signal: data.humidity_percent(),
+            },
+            Input {
+                sensor: InputKind::GasResistor,
+                signal: data.gas_resistance_ohm() as f32,
+            },
+            Input {
+                sensor: InputKind::HeatSource,
+                signal: self.temp_offset_celsius,
+            },
+        ]);
+        if let Some(status) = self.disable_baseline_tracker {
+            bsec_inputs.push(Input {
+                sensor: InputKind::DisableBaselineTracker,
+                signal: status,
+            });
+        }
+        Ok(bsec_inputs)
     }
 }
